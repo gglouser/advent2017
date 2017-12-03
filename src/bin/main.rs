@@ -6,6 +6,7 @@ use std::io::prelude::*;
 use std::process;
 use advent2017::day01;
 use advent2017::day02;
+use advent2017::day03;
 
 struct Config {
     target: String,
@@ -48,6 +49,7 @@ fn main() {
     match &*cfg.target {
         "day01" => day01::run(&input),
         "day02" => day02::run(&input),
+        "day03" => day03::run(&input),
         _ => {
             eprintln!("unknown day");
             process::exit(1);
