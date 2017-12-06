@@ -9,6 +9,7 @@ use advent2017::day02;
 use advent2017::day03;
 use advent2017::day04;
 use advent2017::day05;
+use advent2017::day06;
 
 struct Config {
     target: String,
@@ -54,6 +55,7 @@ fn main() {
         "day03" => day03::run(&input),
         "day04" => day04::run(&input),
         "day05" => day05::run(&input),
+        "day06" => day06::run(&input),
         _ => {
             eprintln!("unknown day");
             process::exit(1);
