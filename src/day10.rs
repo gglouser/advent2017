@@ -1,5 +1,54 @@
-use std::fmt::Write;
+use std::fmt::{Display, Formatter, Result};
+use std::ops::Deref;
 use std::time::Instant;
+
+pub struct Digest([u8; 16]);
+
+impl Display for Digest {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        for b in self.0.iter() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl Deref for Digest {
+    type Target = [u8; 16];
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+pub fn knot_hash(text: &str) -> Digest {
+    let lengths = prep_key(text);
+    let mut elems: Vec<u8> = (0..256).map(|x| x as u8).collect();
+    apply_lengths(&mut elems, &lengths, 64);
+    let mut hash = Digest([0;16]);
+    elems.chunks(16)
+        .map(|ch| ch.iter().fold(0, |acc, &x| acc ^ x))
+        .enumerate()
+        .for_each(|(i,b)| hash.0[i] = b);
+    hash
+}
+
+fn prep_key(keystr: &str) -> Vec<usize> {
+    const SUGAR: [usize; 5] = [17, 31, 73, 47, 23];
+    let mut key = Vec::with_capacity(keystr.len() + SUGAR.len());
+    keystr.bytes().for_each(|b| key.push(b as usize));
+    key.extend(&SUGAR);
+    key
+}
+
+fn apply_lengths(elems: &mut [u8], lengths: &[usize], rounds: u32) {
+    let mut skip = 0;
+    let mut offset = 0;
+    for _ in 0..rounds {
+        for &l in lengths {
+            twist(elems, l, offset);
+            offset = (offset + l + skip) % elems.len();
+            skip += 1;
+        }
+    }
+}
 
 fn twist(xs: &mut [u8], len: usize, offset: usize) {
     if len == 0 { return; }
@@ -14,10 +63,10 @@ fn twist(xs: &mut [u8], len: usize, offset: usize) {
         // then swapped with each other. This reverse-and-swap is faster
         // than elementwise swapping because slice reverse is fairly
         // well optimized in the std lib.
+        let (front,back) = xs.split_at_mut(offset);
 
         // Find short section, either [offset..] or [..end]
         let end = end % size;
-        let (front,back) = xs.split_at_mut(offset);
         let (a,b,c) = if end < size - offset {
             // Wrapped section is the short one
             // The three regions are
@@ -51,51 +100,14 @@ fn twist(xs: &mut [u8], len: usize, offset: usize) {
     }
 }
 
-fn apply_lengths(size: usize, lengths: &[usize], rounds: u32) -> Vec<u8> {
-    let mut elems: Vec<u8> = (0..size).map(|x| x as u8).collect();
-    let mut skip = 0;
-    let mut offset = 0;
-
-    for _ in 0..rounds {
-        for &l in lengths {
-            twist(&mut elems, l, offset);
-            offset = (offset + l + skip) % size;
-            skip += 1;
-        }
-    }
-    elems
-}
-
-const SUGAR: [usize; 5] = [17, 31, 73, 47, 23];
-
-fn prep_key(keystr: &str) -> Vec<usize> {
-    let mut key = Vec::with_capacity(keystr.len() + SUGAR.len());
-    keystr.bytes().for_each(|b| key.push(b as usize));
-    key.extend(&SUGAR);
-    key
-}
-
-fn knot_hash(text: &str) -> String {
-    let part2_key = prep_key(text);
-    let sparse = apply_lengths(256, &part2_key, 64);
-    let dense: Vec<_> = sparse.chunks(16)
-        .map(|ch| ch.iter().fold(0, |acc, &x| acc ^ x))
-        .collect();
-
-    let mut hash = String::new();
-    dense.iter().for_each(|b| write!(hash, "{:02x}", b).unwrap());
-    hash
-}
-
 fn solve(input: &str) -> (u32, String) {
     let part1_key: Vec<usize> = input.trim().split(",")
         .map(|m| m.parse().unwrap())
         .collect();
-    let xs = apply_lengths(256, &part1_key, 1);
-    let part1 = xs[0] as u32 * xs[1] as u32;
-
-    let part2 = knot_hash(input.trim());
-
+    let mut elems: Vec<u8> = (0..256).map(|x| x as u8).collect();
+    apply_lengths(&mut elems, &part1_key, 1);
+    let part1 = elems[0] as u32 * elems[1] as u32;
+    let part2 = knot_hash(input.trim()).to_string();
     (part1, part2)
 }
 
@@ -103,11 +115,11 @@ pub fn run(input: &str) {
     let (part1, part2) = solve(input);
     println!("the single round test value is {}", part1);
     println!("the knot hash is {}", part2);
-    
+
     const REPS: u32 = 1000;
     let now = Instant::now();
     for _ in 0..REPS {
-        knot_hash("AoC 2017");
+        knot_hash("AoC 2017").to_string();
     }
     let e = now.elapsed();
     println!("{} hashes in {}.{:03}s", REPS, e.as_secs(), e.subsec_nanos() / 1000000);
@@ -121,8 +133,9 @@ mod tests {
 
     #[test]
     fn example1() {
-        let xs = apply_lengths(5, &[3,4,1,5], 1);
-        let part1 = xs[0] * xs[1];
+        let mut elems = [0, 1, 2, 3, 4];
+        apply_lengths(&mut elems, &[3,4,1,5], 1);
+        let part1 = elems[0] * elems[1];
         assert_eq!(12, part1);
     }
 
@@ -133,10 +146,10 @@ mod tests {
 
     #[test]
     fn example2() {
-        assert_eq!(knot_hash(""), "a2582a3a0e66e6e86e3812dcb672a272");
-        assert_eq!(knot_hash("AoC 2017"), "33efeb34ea91902bb2f59c9920caa6cd");
-        assert_eq!(knot_hash("1,2,3"), "3efbe78a8d82f29979031a4aa0b16a9d");
-        assert_eq!(knot_hash("1,2,4"), "63960835bcdc130f0b66d7ff4f6a5a8e");
+        assert_eq!(knot_hash("").to_string(), "a2582a3a0e66e6e86e3812dcb672a272");
+        assert_eq!(knot_hash("AoC 2017").to_string(), "33efeb34ea91902bb2f59c9920caa6cd");
+        assert_eq!(knot_hash("1,2,3").to_string(), "3efbe78a8d82f29979031a4aa0b16a9d");
+        assert_eq!(knot_hash("1,2,4").to_string(), "63960835bcdc130f0b66d7ff4f6a5a8e");
     }
 
     #[test]
