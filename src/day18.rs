@@ -227,7 +227,7 @@ jgz a -2
 
     #[test]
     fn example1() {
-        let part1 = run_solo(parse_input(EXAMPLE));
+        let part1 = run_solo(&parse_input(EXAMPLE));
         assert_eq!(4, part1);
     }
 
